@@ -1,0 +1,90 @@
+name: MCP Token Analysis
+description: Analyze token usage of MCP servers and compare against baselines
+author: Grafana Labs
+
+branding:
+  icon: bar-chart-2
+  color: orange
+
+inputs:
+  command:
+    description: Command to start the MCP server
+    required: true
+  baseline:
+    description: Path to baseline JSON file for comparison
+    required: false
+  threshold-percent:
+    description: Maximum allowed percentage increase in tokens
+    required: false
+    default: "5"
+  threshold-absolute:
+    description: Maximum allowed absolute increase in tokens
+    required: false
+  anthropic-api-key:
+    description: Anthropic API key for accurate token counting
+    required: false
+  provider:
+    description: Token counting provider (anthropic or tiktoken)
+    required: false
+    default: anthropic
+  model:
+    description: Model to use for token counting
+    required: false
+  output:
+    description: Path to save the report JSON
+    required: false
+  timeout:
+    description: Timeout in seconds for server startup
+    required: false
+    default: "30"
+  version:
+    description: Version of mcp-tokens to use
+    required: false
+    default: latest
+
+outputs:
+  total-tokens:
+    description: Total token count
+    value: ${{ steps.analyze.outputs.total-tokens }}
+  tool-tokens:
+    description: Token count for tools only
+    value: ${{ steps.analyze.outputs.tool-tokens }}
+  diff:
+    description: Token difference from baseline
+    value: ${{ steps.analyze.outputs.diff }}
+  diff-percent:
+    description: Percentage difference from baseline
+    value: ${{ steps.analyze.outputs.diff-percent }}
+  passed:
+    description: Whether the threshold check passed
+    value: ${{ steps.analyze.outputs.passed }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install mcp-tokens
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: ${{ github.action_path }}/install.sh "$VERSION"
+
+    - name: Run analysis
+      id: analyze
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        MCP_TOKENS_PROVIDER: ${{ inputs.provider }}
+        MCP_TOKENS_MODEL: ${{ inputs.model }}
+        INPUT_COMMAND: ${{ inputs.command }}
+        INPUT_BASELINE: ${{ inputs.baseline }}
+        INPUT_THRESHOLD_PERCENT: ${{ inputs.threshold-percent }}
+        INPUT_THRESHOLD_ABSOLUTE: ${{ inputs.threshold-absolute }}
+        INPUT_OUTPUT: ${{ inputs.output }}
+        INPUT_TIMEOUT: ${{ inputs.timeout }}
+      run: ${{ github.action_path }}/analyze.sh
+
+    - name: Check result
+      shell: bash
+      env:
+        PASSED: ${{ steps.analyze.outputs.passed }}
+      run: ${{ github.action_path }}/check.sh
