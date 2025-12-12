@@ -30,7 +30,7 @@ jobs:
         run: sudo apt-get install -y shellcheck
 
       - name: Run shellcheck
-        run: shellcheck *.sh tests/*.sh
+        run: shellcheck ./*.sh tests/*.sh
 
   actionlint:
     runs-on: ubuntu-latest
