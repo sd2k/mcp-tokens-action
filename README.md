@@ -2,6 +2,8 @@
 
 GitHub Action to analyze token usage of MCP (Model Context Protocol) servers.
 
+This action wraps [sd2k/mcp-tokens](https://github.com/sd2k/mcp-tokens), a CLI tool for analyzing the token footprint of MCP servers.
+
 ## Usage
 
 ### Basic analysis
