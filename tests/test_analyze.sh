@@ -71,6 +71,34 @@ else
   echo "  FAIL: Handle zero tokens (got $TOTAL)"
 fi
 
+# Test 6: Parse v2 multi-provider/multi-model baseline
+TESTS_RUN=$((TESTS_RUN + 1))
+JSON='{"version":2,"providers":{"tiktoken":{"gpt-4o":{"total_tokens":1000,"tools":{"total":800}}}}}'
+if echo "$JSON" | jq -e '.version >= 2 and .providers' > /dev/null 2>&1; then
+  FIRST_PROVIDER=$(echo "$JSON" | jq -r '.providers | keys[0]')
+  FIRST_MODEL=$(echo "$JSON" | jq -r ".providers[\"$FIRST_PROVIDER\"] | keys[0]")
+  TOTAL=$(echo "$JSON" | jq -r ".providers[\"$FIRST_PROVIDER\"][\"$FIRST_MODEL\"].total_tokens")
+  if [ "$FIRST_PROVIDER" = "tiktoken" ] && [ "$FIRST_MODEL" = "gpt-4o" ] && [ "$TOTAL" = "1000" ]; then
+    echo "  PASS: Parse v2 multi-provider baseline"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  else
+    echo "  FAIL: Parse v2 multi-provider baseline (provider=$FIRST_PROVIDER, model=$FIRST_MODEL, total=$TOTAL)"
+  fi
+else
+  echo "  FAIL: Parse v2 multi-provider baseline (format detection failed)"
+fi
+
+# Test 7: Build provider/model list from v2 baseline
+TESTS_RUN=$((TESTS_RUN + 1))
+JSON='{"version":2,"providers":{"anthropic":{"claude-sonnet":{"total_tokens":1000}},"tiktoken":{"gpt-4o":{"total_tokens":900}}}}'
+PROVIDER_LIST=$(echo "$JSON" | jq -r '[.providers | to_entries[] | .key as $p | .value | keys[] | "\($p)/\(.)"] | join(", ")')
+if echo "$PROVIDER_LIST" | grep -q "anthropic/claude-sonnet" && echo "$PROVIDER_LIST" | grep -q "tiktoken/gpt-4o"; then
+  echo "  PASS: Build provider/model list"
+  TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+  echo "  FAIL: Build provider/model list (got: $PROVIDER_LIST)"
+fi
+
 echo
 echo "Results: $TESTS_PASSED/$TESTS_RUN tests passed"
 

@@ -16,13 +16,26 @@ This action wraps [sd2k/mcp-tokens](https://github.com/sd2k/mcp-tokens), a CLI t
     anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-## Recommended Setup: Artifact-based Baseline
+## Token Counting Providers
 
-The recommended pattern is to store the baseline as a GitHub Actions artifact on your main branch, then download it for PR comparisons.
+The action supports two token counting providers:
+
+- **anthropic** - Uses the Anthropic API for accurate token counts (requires API key)
+- **tiktoken** - Uses the tiktoken library for offline approximation (no API key needed)
+
+By default, the action auto-detects which provider to use:
+- If `anthropic-api-key` is provided, uses Anthropic
+- Otherwise, falls back to tiktoken
+
+### Multi-Provider Baselines (Recommended)
+
+To ensure consistent comparisons across all environments (including forks without API keys), use `all-providers: true` when generating baselines. This creates a baseline containing token counts from both providers, so comparisons always use matching providers.
+
+## Recommended Setup: Multi-Provider Artifact Baseline
 
 ### Step 1: Create baseline workflow (`.github/workflows/token-baseline.yml`)
 
-This runs on pushes to main and stores the current token count as an artifact:
+This runs on pushes to main and stores a multi-provider baseline as an artifact:
 
 ```yaml
 name: Update Token Baseline
@@ -30,7 +43,7 @@ name: Update Token Baseline
 on:
   push:
     branches: [main]
-  workflow_dispatch:  # Allow manual triggers
+  workflow_dispatch:
 
 jobs:
   baseline:
@@ -38,15 +51,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Build your MCP server (adjust as needed)
       - name: Build server
         run: make build
 
-      - name: Generate token baseline
+      - name: Generate multi-provider baseline
         uses: sd2k/mcp-tokens-action@v1
         with:
           command: ./dist/my-server
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          all-providers: true
           output: token-baseline.json
 
       - name: Upload baseline artifact
@@ -54,12 +67,12 @@ jobs:
         with:
           name: token-baseline
           path: token-baseline.json
-          retention-days: 90  # Keep for 90 days
+          retention-days: 90
 ```
 
 ### Step 2: Create PR check workflow (`.github/workflows/token-check.yml`)
 
-This runs on PRs, downloads the baseline from main, and compares:
+This runs on PRs and compares against the matching provider in the baseline:
 
 ```yaml
 name: Token Analysis
@@ -73,11 +86,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Build your MCP server (adjust as needed)
       - name: Build server
         run: make build
 
-      # Download baseline from main branch
       - name: Download baseline
         id: download-baseline
         uses: dawidd/action-download-artifact@v6
@@ -87,7 +98,6 @@ jobs:
           path: baseline
           if_no_artifact_found: warn
 
-      # Run analysis with baseline comparison (if baseline exists)
       - name: Analyze tokens
         uses: sd2k/mcp-tokens-action@v1
         with:
@@ -96,6 +106,11 @@ jobs:
           baseline: ${{ steps.download-baseline.outputs.found_artifact == 'true' && 'baseline/token-baseline.json' || '' }}
           threshold-percent: "5"
 ```
+
+With this setup:
+- Main repo PRs with API key: compares Anthropic vs Anthropic baseline
+- Fork PRs without API key: compares tiktoken vs tiktoken baseline
+- Both get accurate, like-for-like comparisons
 
 ## Inputs
 
@@ -106,7 +121,8 @@ jobs:
 | `baseline` | Path to baseline JSON file | No | - |
 | `threshold-percent` | Max allowed % increase | No | `5` |
 | `threshold-absolute` | Max allowed absolute increase | No | - |
-| `provider` | Token counter (`anthropic` or `tiktoken`) | No | `anthropic` |
+| `all-providers` | Generate baseline with all providers | No | `false` |
+| `provider` | Token counter (`anthropic` or `tiktoken`) | No | auto-detect |
 | `model` | Model for token counting | No | - |
 | `output` | Path to save report JSON | No | - |
 | `timeout` | Server startup timeout (seconds) | No | `30` |
@@ -118,6 +134,7 @@ jobs:
 |--------|-------------|
 | `total-tokens` | Total token count |
 | `tool-tokens` | Token count for tools only |
+| `provider` | Token counting provider used |
 | `diff` | Token difference from baseline |
 | `diff-percent` | Percentage difference |
 | `passed` | Whether threshold check passed |
@@ -147,4 +164,4 @@ jobs:
 
 ## License
 
-Licensed under the Apache License, Version 2.0 `<http://www.apache.org/licenses/LICENSE-2.0>` or the MIT license `<http://opensource.org/licenses/MIT>`, at your option.
+Licensed under the Apache License, Version 2.0 or the MIT license, at your option.

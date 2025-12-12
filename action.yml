@@ -21,15 +21,18 @@ inputs:
     description: Maximum allowed absolute increase in tokens
     required: false
   anthropic-api-key:
-    description: Anthropic API key for accurate token counting
+    description: Anthropic API key for accurate token counting (falls back to tiktoken if not provided)
     required: false
   provider:
-    description: Token counting provider (anthropic or tiktoken)
+    description: Token counting provider (anthropic or tiktoken). Auto-detects if not specified.
     required: false
-    default: anthropic
   model:
     description: Model to use for token counting
     required: false
+  all-providers:
+    description: Generate baseline with all available providers for cross-environment compatibility
+    required: false
+    default: "false"
   output:
     description: Path to save the report JSON
     required: false
@@ -49,6 +52,9 @@ outputs:
   tool-tokens:
     description: Token count for tools only
     value: ${{ steps.analyze.outputs.tool-tokens }}
+  provider:
+    description: Token counting provider used
+    value: ${{ steps.analyze.outputs.provider }}
   diff:
     description: Token difference from baseline
     value: ${{ steps.analyze.outputs.diff }}
@@ -81,6 +87,7 @@ runs:
         INPUT_THRESHOLD_ABSOLUTE: ${{ inputs.threshold-absolute }}
         INPUT_OUTPUT: ${{ inputs.output }}
         INPUT_TIMEOUT: ${{ inputs.timeout }}
+        INPUT_ALL_PROVIDERS: ${{ inputs.all-providers }}
       run: ${{ github.action_path }}/analyze.sh
 
     - name: Check result
