@@ -1,6 +1,6 @@
 name: MCP Token Analysis
 description: Analyze token usage of MCP servers and compare against baselines
-author: Grafana Labs
+author: Ben Sully
 
 branding:
   icon: bar-chart-2

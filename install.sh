@@ -2,7 +2,7 @@
 set -euo pipefail
 
 VERSION="${1:-latest}"
-REPO="grafana/mcp-tokens"
+REPO="sd2k/mcp-tokens"
 
 if [ "$VERSION" = "latest" ]; then
   # Get latest release tag
