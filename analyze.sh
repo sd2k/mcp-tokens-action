@@ -7,6 +7,14 @@ if [ -z "$INPUT_COMMAND" ]; then
   exit 1
 fi
 
+# Unset empty env vars so CLI can auto-detect
+if [ -z "$MCP_TOKENS_PROVIDER" ]; then
+  unset MCP_TOKENS_PROVIDER
+fi
+if [ -z "$MCP_TOKENS_MODEL" ]; then
+  unset MCP_TOKENS_MODEL
+fi
+
 # Inputs come from environment variables set by the action
 CMD="mcp-tokens analyze --format json --timeout ${INPUT_TIMEOUT:-30}"
 
