@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e
 
+# Validate required inputs
+if [ -z "$INPUT_COMMAND" ]; then
+  echo "::error::Required input 'command' is not set"
+  exit 1
+fi
+
 # Inputs come from environment variables set by the action
 CMD="mcp-tokens analyze --format json --timeout ${INPUT_TIMEOUT:-30}"
 
@@ -25,9 +31,43 @@ CMD="$CMD -- $INPUT_COMMAND"
 
 echo "Running: $CMD"
 
+# Run command, capturing stdout and stderr separately
+STDERR_FILE=$(mktemp)
 set +e
-OUTPUT=$($CMD 2>&1)
+OUTPUT=$($CMD 2>"$STDERR_FILE")
+EXIT_CODE=$?
+STDERR=$(<"$STDERR_FILE")
+rm -f "$STDERR_FILE"
 set -e
+
+# Show stderr for debugging (but don't fail on it)
+if [ -n "$STDERR" ]; then
+  echo "::debug::stderr output: $STDERR"
+fi
+
+# Check if command failed
+if [ $EXIT_CODE -ne 0 ]; then
+  echo "::error::mcp-tokens failed with exit code $EXIT_CODE"
+  if [ -n "$STDERR" ]; then
+    echo "::error::$STDERR"
+  fi
+  if [ -n "$OUTPUT" ]; then
+    echo "::error::$OUTPUT"
+  fi
+  exit $EXIT_CODE
+fi
+
+# Validate JSON output
+if [ -z "$OUTPUT" ]; then
+  echo "::error::mcp-tokens produced no output"
+  exit 1
+fi
+
+if ! echo "$OUTPUT" | jq -e . > /dev/null 2>&1; then
+  echo "::error::mcp-tokens produced invalid JSON output"
+  echo "::error::Output was: $OUTPUT"
+  exit 1
+fi
 
 # Check if this is a multi-provider baseline output (v2 format: providers -> model -> report)
 if echo "$OUTPUT" | jq -e '.version >= 2 and .providers' > /dev/null 2>&1; then
@@ -36,10 +76,10 @@ if echo "$OUTPUT" | jq -e '.version >= 2 and .providers' > /dev/null 2>&1; then
   FIRST_PROVIDER=$(echo "$OUTPUT" | jq -r '.providers | keys[0]')
   FIRST_MODEL=$(echo "$OUTPUT" | jq -r ".providers[\"$FIRST_PROVIDER\"] | keys[0]")
   FIRST_REPORT=$(echo "$OUTPUT" | jq -c ".providers[\"$FIRST_PROVIDER\"][\"$FIRST_MODEL\"]")
-  
+
   TOTAL_TOKENS=$(echo "$FIRST_REPORT" | jq -r '.total_tokens')
   TOOL_TOKENS=$(echo "$FIRST_REPORT" | jq -r '.tools.total')
-  
+
   # Build provider/model list for output
   PROVIDER_LIST=$(echo "$OUTPUT" | jq -r '[.providers | to_entries[] | .key as $p | .value | keys[] | "\($p)/\(.)"] | join(", ")')
   PROVIDER="multi:$PROVIDER_LIST"
@@ -76,7 +116,7 @@ elif echo "$OUTPUT" | jq -e '.report' > /dev/null 2>&1; then
   elif [ -n "$BASELINE_MODEL" ] && [ "$BASELINE_MODEL" != "$MODEL" ]; then
     echo "::warning::Model mismatch: baseline used $BASELINE_MODEL, current uses $MODEL."
   fi
-  
+
   PROVIDER="$PROVIDER/$MODEL"
 else
   # Single provider, no comparison
