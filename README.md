@@ -93,6 +93,7 @@ jobs:
         id: download-baseline
         uses: dawidd/action-download-artifact@v6
         with:
+          workflow: token-baseline.yml
           branch: main
           name: token-baseline
           path: baseline
