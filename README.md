@@ -83,6 +83,8 @@ on:
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
@@ -155,16 +157,24 @@ With this setup:
 The action can automatically post a comment on PRs when the threshold check fails (or always, if configured). This shows which tools caused the token increase:
 
 ```yaml
-- name: Analyze tokens
-  uses: sd2k/mcp-tokens-action@v1
-  with:
-    command: ./server
-    anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-    baseline: baseline/token-baseline.json
-    threshold-percent: "5"
-    comment: true
-    github-token: ${{ secrets.GITHUB_TOKEN }}
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Analyze tokens
+        uses: sd2k/mcp-tokens-action@v1
+        with:
+          command: ./server
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          baseline: baseline/token-baseline.json
+          threshold-percent: "5"
+          comment: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+**Note:** The job needs `permissions: pull-requests: write` for the `GITHUB_TOKEN` to post comments.
 
 By default, comments are only posted when the check fails. Use `comment-on-pass: true` to always post a comment.
 
