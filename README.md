@@ -106,6 +106,8 @@ jobs:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           baseline: ${{ steps.download-baseline.outputs.found_artifact == 'true' && 'baseline/token-baseline.json' || '' }}
           threshold-percent: "5"
+          comment: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 With this setup:
@@ -128,6 +130,10 @@ With this setup:
 | `output` | Path to save report JSON | No | - |
 | `timeout` | Server startup timeout (seconds) | No | `30` |
 | `version` | Version of mcp-tokens to use | No | `latest` |
+| `comment` | Post a PR comment with results | No | `false` |
+| `comment-on-pass` | Post comment even when check passes | No | `false` |
+| `max-tool-changes` | Max tool changes to show in comment (0 for all) | No | `5` |
+| `github-token` | GitHub token for PR comments | No | - |
 
 ## Outputs
 
@@ -139,29 +145,51 @@ With this setup:
 | `diff` | Token difference from baseline |
 | `diff-percent` | Percentage difference |
 | `passed` | Whether threshold check passed |
+| `failure-reason` | Human-readable failure reason if threshold exceeded |
+| `baseline-tokens` | Token count from baseline (for comparison) |
+| `tool-changes` | JSON array of tool changes (added/removed/modified with diffs) |
+| `tool-changes-count` | Number of tools that changed |
 
-## Using Outputs
+## PR Comments
+
+The action can automatically post a comment on PRs when the threshold check fails (or always, if configured). This shows which tools caused the token increase:
 
 ```yaml
 - name: Analyze tokens
-  id: tokens
   uses: sd2k/mcp-tokens-action@v1
   with:
     command: ./server
     anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-
-- name: Comment on PR
-  if: github.event_name == 'pull_request'
-  uses: actions/github-script@v7
-  with:
-    script: |
-      github.rest.issues.createComment({
-        owner: context.repo.owner,
-        repo: context.repo.repo,
-        issue_number: context.issue.number,
-        body: `## MCP Token Analysis\n\nTotal tokens: ${{ steps.tokens.outputs.total-tokens }}`
-      })
+    baseline: baseline/token-baseline.json
+    threshold-percent: "5"
+    comment: true
+    github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+By default, comments are only posted when the check fails. Use `comment-on-pass: true` to always post a comment.
+
+The `max-tool-changes` input controls how many tool changes are shown (default: 5, sorted by largest impact first). Set to `0` to show all changes.
+
+This produces a comment like:
+
+> ## MCP Token Analysis
+>
+> ❌ **Failed**
+>
+> | Metric | Value |
+> |--------|-------|
+> | Baseline | 1000 tokens |
+> | Current | 1150 tokens |
+> | Change | +150 (+15.0%) |
+>
+> **Reason:** Token increase of 15.0% exceeds threshold of 5.0%
+>
+> ### Tool Changes
+>
+> | Tool | Change | Tokens |
+> |------|--------|--------|
+> | `newTool` | 🆕 Added | +100 |
+> | `existingTool` | 📝 Modified | +50 |
 
 ## License
 

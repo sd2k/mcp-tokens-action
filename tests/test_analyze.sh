@@ -99,6 +99,36 @@ else
   echo "  FAIL: Build provider/model list (got: $PROVIDER_LIST)"
 fi
 
+# Test 8: Extract tool_changes from comparison
+TESTS_RUN=$((TESTS_RUN + 1))
+JSON='{"report":{"total_tokens":1200,"tools":{"total":600},"counter":{"provider":"tiktoken","model":"gpt-4o"}},"comparison":{"diff":200,"diff_percent":20.0,"passed":false,"failure_reason":"Token increase of 20.0% exceeds threshold of 5.0%","baseline_tokens":1000,"tool_changes":[{"name":"newTool","change_type":"added","baseline_tokens":null,"current_tokens":150,"diff":150},{"name":"existingTool","change_type":"modified","baseline_tokens":100,"current_tokens":150,"diff":50}]}}'
+COMPARISON=$(echo "$JSON" | jq -c '.comparison')
+TOOL_CHANGES=$(echo "$COMPARISON" | jq -c '.tool_changes // []')
+TOOL_CHANGES_COUNT=$(echo "$TOOL_CHANGES" | jq 'length')
+FAILURE_REASON=$(echo "$COMPARISON" | jq -r '.failure_reason // empty')
+BASELINE_TOKENS=$(echo "$COMPARISON" | jq -r '.baseline_tokens')
+FIRST_TOOL_NAME=$(echo "$TOOL_CHANGES" | jq -r '.[0].name')
+FIRST_TOOL_TYPE=$(echo "$TOOL_CHANGES" | jq -r '.[0].change_type')
+if [ "$TOOL_CHANGES_COUNT" = "2" ] && [ "$FIRST_TOOL_NAME" = "newTool" ] && [ "$FIRST_TOOL_TYPE" = "added" ] && [ "$BASELINE_TOKENS" = "1000" ] && [ -n "$FAILURE_REASON" ]; then
+  echo "  PASS: Extract tool_changes from comparison"
+  TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+  echo "  FAIL: Extract tool_changes from comparison (count=$TOOL_CHANGES_COUNT, name=$FIRST_TOOL_NAME, type=$FIRST_TOOL_TYPE, baseline=$BASELINE_TOKENS, reason=$FAILURE_REASON)"
+fi
+
+# Test 9: Handle empty tool_changes
+TESTS_RUN=$((TESTS_RUN + 1))
+JSON='{"report":{"total_tokens":1000},"comparison":{"diff":0,"diff_percent":0,"passed":true}}'
+COMPARISON=$(echo "$JSON" | jq -c '.comparison')
+TOOL_CHANGES=$(echo "$COMPARISON" | jq -c '.tool_changes // []')
+TOOL_CHANGES_COUNT=$(echo "$TOOL_CHANGES" | jq 'length')
+if [ "$TOOL_CHANGES_COUNT" = "0" ] && [ "$TOOL_CHANGES" = "[]" ]; then
+  echo "  PASS: Handle empty tool_changes"
+  TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+  echo "  FAIL: Handle empty tool_changes (count=$TOOL_CHANGES_COUNT, changes=$TOOL_CHANGES)"
+fi
+
 echo
 echo "Results: $TESTS_PASSED/$TESTS_RUN tests passed"
 

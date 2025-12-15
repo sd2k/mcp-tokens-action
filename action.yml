@@ -44,6 +44,21 @@ inputs:
     description: Version of mcp-tokens to use
     required: false
     default: latest
+  comment:
+    description: Post a PR comment with results (requires github-token for PRs)
+    required: false
+    default: "false"
+  comment-on-pass:
+    description: Post a comment even when the check passes (only applies when comment is true)
+    required: false
+    default: "false"
+  max-tool-changes:
+    description: Maximum number of tool changes to show in PR comment (0 for all)
+    required: false
+    default: "5"
+  github-token:
+    description: GitHub token for posting PR comments (required if comment is true)
+    required: false
 
 outputs:
   total-tokens:
@@ -64,6 +79,18 @@ outputs:
   passed:
     description: Whether the threshold check passed
     value: ${{ steps.analyze.outputs.passed }}
+  failure-reason:
+    description: Human-readable failure reason if threshold exceeded
+    value: ${{ steps.analyze.outputs.failure-reason }}
+  baseline-tokens:
+    description: Token count from baseline (for comparison)
+    value: ${{ steps.analyze.outputs.baseline-tokens }}
+  tool-changes:
+    description: JSON array of tool changes (added/removed/modified tools with token diffs)
+    value: ${{ steps.analyze.outputs.tool-changes }}
+  tool-changes-count:
+    description: Number of tools that changed
+    value: ${{ steps.analyze.outputs.tool-changes-count }}
 
 runs:
   using: composite
@@ -89,6 +116,22 @@ runs:
         INPUT_TIMEOUT: ${{ inputs.timeout }}
         INPUT_ALL_PROVIDERS: ${{ inputs.all-providers }}
       run: ${{ github.action_path }}/analyze.sh
+
+    - name: Post PR comment
+      if: inputs.comment == 'true' && github.event_name == 'pull_request' && (steps.analyze.outputs.passed == 'false' || inputs.comment-on-pass == 'true')
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        PASSED: ${{ steps.analyze.outputs.passed }}
+        TOTAL_TOKENS: ${{ steps.analyze.outputs.total-tokens }}
+        BASELINE_TOKENS: ${{ steps.analyze.outputs.baseline-tokens }}
+        DIFF: ${{ steps.analyze.outputs.diff }}
+        DIFF_PERCENT: ${{ steps.analyze.outputs.diff-percent }}
+        FAILURE_REASON: ${{ steps.analyze.outputs.failure-reason }}
+        TOOL_CHANGES: ${{ steps.analyze.outputs.tool-changes }}
+        MAX_TOOL_CHANGES: ${{ inputs.max-tool-changes }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: ${{ github.action_path }}/comment.sh
 
     - name: Check result
       shell: bash

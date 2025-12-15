@@ -77,6 +77,12 @@ if ! echo "$OUTPUT" | jq -e . > /dev/null 2>&1; then
   exit 1
 fi
 
+# Initialize comparison-only variables with defaults
+FAILURE_REASON=""
+BASELINE_TOKENS=""
+TOOL_CHANGES="[]"
+TOOL_CHANGES_COUNT="0"
+
 # Check if this is a multi-provider baseline output (v2 format: providers -> model -> report)
 if echo "$OUTPUT" | jq -e '.version >= 2 and .providers' > /dev/null 2>&1; then
   # v2 multi-provider/multi-model baseline
@@ -115,6 +121,12 @@ elif echo "$OUTPUT" | jq -e '.report' > /dev/null 2>&1; then
   DIFF=$(echo "$COMPARISON" | jq -r '.diff')
   DIFF_PERCENT=$(echo "$COMPARISON" | jq -r '.diff_percent')
   PASSED=$(echo "$COMPARISON" | jq -r '.passed')
+  FAILURE_REASON=$(echo "$COMPARISON" | jq -r '.failure_reason // empty')
+  BASELINE_TOKENS=$(echo "$COMPARISON" | jq -r '.baseline_tokens')
+
+  # Extract tool changes for PR comments
+  TOOL_CHANGES=$(echo "$COMPARISON" | jq -c '.tool_changes // []')
+  TOOL_CHANGES_COUNT=$(echo "$TOOL_CHANGES" | jq 'length')
 
   # Warn if providers or models differ
   BASELINE_PROVIDER=$(echo "$COMPARISON" | jq -r '.baseline_provider // empty')
@@ -146,6 +158,16 @@ fi
   echo "diff=$DIFF"
   echo "diff-percent=$DIFF_PERCENT"
   echo "passed=$PASSED"
+  echo "failure-reason=$FAILURE_REASON"
+  echo "baseline-tokens=$BASELINE_TOKENS"
+  echo "tool-changes-count=$TOOL_CHANGES_COUNT"
+} >> "$GITHUB_OUTPUT"
+
+# Use heredoc for multi-line JSON output
+{
+  echo "tool-changes<<EOF"
+  echo "$TOOL_CHANGES"
+  echo "EOF"
 } >> "$GITHUB_OUTPUT"
 
 echo "Total tokens: $TOTAL_TOKENS"
@@ -154,4 +176,10 @@ echo "Provider: $PROVIDER"
 if [ -n "$DIFF" ]; then
   echo "Diff: $DIFF ($DIFF_PERCENT%)"
   echo "Passed: $PASSED"
+  if [ -n "$FAILURE_REASON" ]; then
+    echo "Failure reason: $FAILURE_REASON"
+  fi
+  if [ "$TOOL_CHANGES_COUNT" != "0" ]; then
+    echo "Tool changes: $TOOL_CHANGES_COUNT"
+  fi
 fi
