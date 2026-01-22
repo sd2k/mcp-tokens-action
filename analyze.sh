@@ -54,15 +54,23 @@ if [ -n "$STDERR" ]; then
 fi
 
 # Check if command failed
+# Note: mcp-tokens exits with code 1 when threshold is exceeded, but still produces valid JSON.
+# We should only fail here if the output is not valid JSON (indicating a real error).
+# The threshold check will be handled by check.sh after the comment is posted.
 if [ $EXIT_CODE -ne 0 ]; then
-  echo "::error::mcp-tokens failed with exit code $EXIT_CODE"
-  if [ -n "$STDERR" ]; then
-    echo "::error::$STDERR"
+  # Check if we got valid JSON output despite non-zero exit code
+  if [ -n "$OUTPUT" ] && echo "$OUTPUT" | jq -e . > /dev/null 2>&1; then
+    echo "::warning::mcp-tokens exited with code $EXIT_CODE but produced valid output (likely threshold exceeded)"
+  else
+    echo "::error::mcp-tokens failed with exit code $EXIT_CODE"
+    if [ -n "$STDERR" ]; then
+      echo "::error::$STDERR"
+    fi
+    if [ -n "$OUTPUT" ]; then
+      echo "::error::$OUTPUT"
+    fi
+    exit $EXIT_CODE
   fi
-  if [ -n "$OUTPUT" ]; then
-    echo "::error::$OUTPUT"
-  fi
-  exit $EXIT_CODE
 fi
 
 # Validate JSON output
