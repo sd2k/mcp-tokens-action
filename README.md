@@ -180,6 +180,8 @@ By default, comments are only posted when the check fails. Use `comment-on-pass:
 
 The `max-tool-changes` input controls how many tool changes are shown (default: 5, sorted by largest impact first). Set to `0` to show all changes.
 
+When posting a new comment, the action automatically minimizes (hides as "outdated") any previous MCP Token Analysis comments on the same PR to reduce noise.
+
 This produces a comment like:
 
 > ## MCP Token Analysis
