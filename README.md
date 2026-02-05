@@ -151,6 +151,8 @@ With this setup:
 | `baseline-tokens` | Token count from baseline (for comparison) |
 | `tool-changes` | JSON array of tool changes (added/removed/modified with diffs) |
 | `tool-changes-count` | Number of tools that changed |
+| `comment-body` | Markdown body for PR comment (useful for workflow_run pattern) |
+| `analysis-json` | JSON object with all analysis results (useful for artifact storage) |
 
 ## PR Comments
 
@@ -181,6 +183,168 @@ By default, comments are only posted when the check fails. Use `comment-on-pass:
 The `max-tool-changes` input controls how many tool changes are shown (default: 5, sorted by largest impact first). Set to `0` to show all changes.
 
 When posting a new comment, the action automatically minimizes (hides as "outdated") any previous MCP Token Analysis comments on the same PR to reduce noise.
+
+### Fork PR Comments
+
+When a PR is opened from a fork, the default `GITHUB_TOKEN` has read-only permissions and cannot post comments. This is a GitHub security feature. You'll see this error:
+
+```
+Warning: Failed to post PR comment (HTTP 403)
+{"message": "Resource not accessible by integration", ...}
+```
+
+To support comments on fork PRs, use the **workflow_run pattern** with two workflows:
+
+#### Workflow 1: Analysis (`.github/workflows/token-check.yml`)
+
+This runs on PRs and saves results as artifacts:
+
+```yaml
+name: Token Analysis
+
+on:
+  pull_request:
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build server
+        run: make build
+
+      - name: Download baseline
+        id: download-baseline
+        uses: dawidd/action-download-artifact@v6
+        with:
+          workflow: token-baseline.yml
+          branch: main
+          name: token-baseline
+          path: baseline
+          if_no_artifact_found: warn
+
+      - name: Analyze tokens
+        id: analyze
+        uses: sd2k/mcp-tokens-action@v1
+        with:
+          command: ./dist/my-server
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          baseline: ${{ steps.download-baseline.outputs.found_artifact == 'true' && 'baseline/token-baseline.json' || '' }}
+          threshold-percent: "5"
+          comment-on-pass: true  # Generate comment body even on pass
+
+      - name: Save analysis results
+        if: always()
+        run: |
+          mkdir -p results
+          echo '${{ steps.analyze.outputs.analysis-json }}' > results/analysis.json
+          cat > results/metadata.json << 'EOF'
+          {
+            "pr_number": "${{ github.event.pull_request.number }}",
+            "passed": "${{ steps.analyze.outputs.passed }}"
+          }
+          EOF
+          cat > results/comment.md << 'EOF'
+          ${{ steps.analyze.outputs.comment-body }}
+          EOF
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: token-analysis-${{ github.event.pull_request.number }}
+          path: results/
+          retention-days: 1
+```
+
+#### Workflow 2: Post Comment (`.github/workflows/token-comment.yml`)
+
+This runs after the analysis workflow completes and posts the comment:
+
+```yaml
+name: Post Token Analysis Comment
+
+on:
+  workflow_run:
+    workflows: ["Token Analysis"]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.event == 'pull_request'
+    steps:
+      - name: Download analysis results
+        uses: dawidd/action-download-artifact@v6
+        with:
+          run_id: ${{ github.event.workflow_run.id }}
+          name: token-analysis-.*
+          name_is_regexp: true
+          path: results
+
+      - name: Post PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            // Find the results directory
+            const dirs = fs.readdirSync('results');
+            const resultDir = dirs.find(d => d.startsWith('token-analysis-'));
+            if (!resultDir) {
+              console.log('No analysis results found');
+              return;
+            }
+
+            const metadata = JSON.parse(fs.readFileSync(path.join('results', resultDir, 'metadata.json'), 'utf8'));
+            const commentBody = fs.readFileSync(path.join('results', resultDir, 'comment.md'), 'utf8');
+
+            const prNumber = parseInt(metadata.pr_number);
+            if (!prNumber) {
+              console.log('No PR number found');
+              return;
+            }
+
+            // Find and minimize previous comments
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+
+            const signature = '## MCP Token Analysis';
+            for (const comment of comments) {
+              if (comment.body.startsWith(signature)) {
+                await github.graphql(`
+                  mutation($id: ID!) {
+                    minimizeComment(input: {subjectId: $id, classifier: OUTDATED}) {
+                      minimizedComment { isMinimized }
+                    }
+                  }
+                `, { id: comment.node_id });
+              }
+            }
+
+            // Post new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: commentBody,
+            });
+
+            console.log(`Posted comment on PR #${prNumber}`);
+```
+
+This two-workflow pattern is secure because:
+- The first workflow runs untrusted fork code but only saves results to artifacts
+- The second workflow runs trusted code from your main branch with write permissions
+- The artifact acts as a safe data bridge between the two
 
 This produces a comment like:
 
