@@ -178,6 +178,35 @@ fi
   echo "EOF"
 } >> "$GITHUB_OUTPUT"
 
+# Create a JSON bundle of all analysis results for easy artifact storage
+ANALYSIS_JSON=$(jq -n \
+  --arg total_tokens "$TOTAL_TOKENS" \
+  --arg tool_tokens "$TOOL_TOKENS" \
+  --arg provider "$PROVIDER" \
+  --arg diff "$DIFF" \
+  --arg diff_percent "$DIFF_PERCENT" \
+  --arg passed "$PASSED" \
+  --arg failure_reason "$FAILURE_REASON" \
+  --arg baseline_tokens "$BASELINE_TOKENS" \
+  --argjson tool_changes "$TOOL_CHANGES" \
+  '{
+    total_tokens: $total_tokens,
+    tool_tokens: $tool_tokens,
+    provider: $provider,
+    diff: $diff,
+    diff_percent: $diff_percent,
+    passed: $passed,
+    failure_reason: $failure_reason,
+    baseline_tokens: $baseline_tokens,
+    tool_changes: $tool_changes
+  }')
+
+{
+  echo "analysis-json<<EOF"
+  echo "$ANALYSIS_JSON"
+  echo "EOF"
+} >> "$GITHUB_OUTPUT"
+
 echo "Total tokens: $TOTAL_TOKENS"
 echo "Tool tokens: $TOOL_TOKENS"
 echo "Provider: $PROVIDER"
