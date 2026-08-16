@@ -60,6 +60,25 @@ inputs:
     description: GitHub token for posting PR comments (required if comment is true)
     required: false
 
+  badge:
+    description: Generate a shields.io endpoint badge JSON from the measurement
+    required: false
+    default: "false"
+  badge-path:
+    description: Where to write the badge JSON
+    required: false
+    default: badge.json
+  badge-label:
+    description: Badge label text
+    required: false
+    default: context cost
+  badge-gist-id:
+    description: Gist id to publish the badge JSON to (requires gist-token)
+    required: false
+  gist-token:
+    description: Token with gist scope for publishing the badge JSON
+    required: false
+
 outputs:
   total-tokens:
     description: Total token count
@@ -91,6 +110,9 @@ outputs:
   tool-changes-count:
     description: Number of tools that changed
     value: ${{ steps.analyze.outputs.tool-changes-count }}
+  badge:
+    description: The shields.io endpoint badge JSON
+    value: ${{ steps.badge.outputs.badge }}
 
 runs:
   using: composite
@@ -139,3 +161,15 @@ runs:
       env:
         PASSED: ${{ steps.analyze.outputs.passed }}
       run: ${{ github.action_path }}/check.sh
+
+    - name: Generate badge
+      id: badge
+      if: inputs.badge == 'true' && success()
+      shell: bash
+      env:
+        BADGE_TOKENS: ${{ steps.analyze.outputs.tool-tokens }}
+        BADGE_PATH: ${{ inputs.badge-path }}
+        BADGE_LABEL: ${{ inputs.badge-label }}
+        BADGE_GIST_ID: ${{ inputs.badge-gist-id }}
+        GIST_TOKEN: ${{ inputs.gist-token }}
+      run: ${{ github.action_path }}/badge.sh

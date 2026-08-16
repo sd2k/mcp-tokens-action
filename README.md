@@ -206,3 +206,27 @@ This produces a comment like:
 ## License
 
 Licensed under the Apache License, Version 2.0 or the MIT license, at your option.
+
+## Publish a context-cost badge
+
+Turn the measurement into a [shields.io endpoint badge](https://shields.io/badges/endpoint-badge) your README can wear:
+
+```yaml
+- uses: sd2k/mcp-tokens-action@v1
+  with:
+    command: 'npx -y your-mcp-server'
+    badge: 'true'
+    badge-gist-id: '<your-gist-id>'
+    gist-token: ${{ secrets.GIST_TOKEN }}
+```
+
+Then in your README:
+
+```markdown
+[![context cost](https://img.shields.io/endpoint?url=<raw gist URL>/badge.json)](https://athakur3.github.io/mcp-context-cost/METHODOLOGY)
+```
+
+Zero-token alternative: set `badge-path`, commit the JSON to a `badges` branch, and point
+shields at the raw.githubusercontent URL. The badge step runs only on success, so a failed
+threshold check never overwrites a badge — it degrades to last-known-good. The badge number
+is `tool-tokens` (tool-schema cost); color bands are documented in the linked methodology.
