@@ -129,6 +129,52 @@ else
   echo "  FAIL: Handle empty tool_changes (count=$TOOL_CHANGES_COUNT, changes=$TOOL_CHANGES)"
 fi
 
+# Test 10: Generate analysis-json output
+TESTS_RUN=$((TESTS_RUN + 1))
+TOTAL_TOKENS="1150"
+TOOL_TOKENS="600"
+PROVIDER="tiktoken/gpt-4o"
+DIFF="150"
+DIFF_PERCENT="15.0"
+PASSED="false"
+FAILURE_REASON="Token increase of 15.0% exceeds threshold of 5.0%"
+BASELINE_TOKENS="1000"
+TOOL_CHANGES='[{"name":"newTool","change_type":"added","diff":150}]'
+
+ANALYSIS_JSON=$(jq -n \
+  --arg total_tokens "$TOTAL_TOKENS" \
+  --arg tool_tokens "$TOOL_TOKENS" \
+  --arg provider "$PROVIDER" \
+  --arg diff "$DIFF" \
+  --arg diff_percent "$DIFF_PERCENT" \
+  --arg passed "$PASSED" \
+  --arg failure_reason "$FAILURE_REASON" \
+  --arg baseline_tokens "$BASELINE_TOKENS" \
+  --argjson tool_changes "$TOOL_CHANGES" \
+  '{
+    total_tokens: $total_tokens,
+    tool_tokens: $tool_tokens,
+    provider: $provider,
+    diff: $diff,
+    diff_percent: $diff_percent,
+    passed: $passed,
+    failure_reason: $failure_reason,
+    baseline_tokens: $baseline_tokens,
+    tool_changes: $tool_changes
+  }')
+
+# Verify JSON is valid and contains expected fields
+JSON_TOTAL=$(echo "$ANALYSIS_JSON" | jq -r '.total_tokens')
+JSON_PASSED=$(echo "$ANALYSIS_JSON" | jq -r '.passed')
+JSON_TOOL_COUNT=$(echo "$ANALYSIS_JSON" | jq '.tool_changes | length')
+
+if [ "$JSON_TOTAL" = "1150" ] && [ "$JSON_PASSED" = "false" ] && [ "$JSON_TOOL_COUNT" = "1" ]; then
+  echo "  PASS: Generate analysis-json output"
+  TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+  echo "  FAIL: Generate analysis-json output (total=$JSON_TOTAL, passed=$JSON_PASSED, tool_count=$JSON_TOOL_COUNT)"
+fi
+
 echo
 echo "Results: $TESTS_PASSED/$TESTS_RUN tests passed"
 
